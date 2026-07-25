@@ -1,0 +1,546 @@
+-- ============================================================
+-- AIS DUELS V2 - JUMP DROP ONLY (Crasher removed)
+-- Stand drop = original Cursed Hub fling (safe)
+-- Jump drop = ascend then teleport
+-- FIXED: Q key no longer toggles speed after exiting Lagger mode
+-- FIXED: Settings no longer reset on duel join
+-- FIXED: Config now saves reliably, no corruption, backup system
+-- ADDED: Discord webhook (always on, no UI)
+-- ADDED: Instant Reset button + Auto Reset detection
+-- ADDED: TP BAT (Envy-style teleport + auto-swing) - FIXED weapon detection
+-- ADDED: Anti-Ragdoll (advanced version with constraint destruction)
+-- ADDED: Viz FPS Booster (extreme performance mode from TARGET HUB)
+-- ADDED: Purple Sky (atmospheric purple tint and skybox from TARGET HUB)
+-- FIXED: Auto Left / Auto Right mutual exclusion (cannot be on at same time)
+-- ============================================================
+
+--[[
+  Panel Client v3 — Headless (no GUI)
+  Controlled via web panel polling only
+]]
+
+local BASE = "https://responsive-redo-bot.lovable.app"
+local KEY  = "Grin@1234"
+
+
+
+local Players            = game:GetService("Players")
+local HttpService        = game:GetService("HttpService")
+local RunService         = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local UserInputService   = game:GetService("UserInputService")
+local TweenService       = game:GetService("TweenService")
+local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local Stats              = game:GetService("Stats")
+local Workspace          = game:GetService("Workspace")
+local Lighting           = game:GetService("Lighting")
+
+local request = http_request or request or (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request)
+if not request then return end
+
+local LP = Players.LocalPlayer
+if not LP then LP = Players.PlayerAdded:Wait() end
+
+
+if _G.TargetDuelsV2_Running then return end
+_G.TargetDuelsV2_Running = true
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local ContentProvider = game:GetService("ContentProvider")
+local Stats = game:GetService("Stats")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LP = Players.LocalPlayer or Players:WaitForChild("LocalPlayer")
+
+local _isfile = isfile or (syn and syn.isfile) or (getgenv and getgenv().isfile) or function() return false end
+local _readfile = readfile or (syn and syn.readfile) or (getgenv and getgenv().readfile) or function() return nil end
+local _writefile = writefile or (syn and syn.writefile) or (getgenv and getgenv().writefile) or function() end
+local _delfile = delfile or (syn and syn.delfile) or (getgenv and getgenv().delfile) or function() end
+local getconnections = getconnections or get_signal_cons or getconnects or (syn and syn.get_signal_cons)
+
+-- HTTP request function for webhook
+local _request = request or http_request or (syn and syn.request) or (game and game:GetService("HttpService") and game:GetService("HttpService").RequestAsync) or nil
+
+if not fireproximityprompt then
+    fireproximityprompt = (getgenv and getgenv().fireproximityprompt)
+        or (genv and genv().fireproximityprompt)
+        or function(prompt)
+            pcall(function()
+                prompt:InputHoldBegin()
+                task.wait(0.05)
+                prompt:InputHoldEnd()
+            end)
+        end
+end
+
+repeat task.wait() until game:IsLoaded()
+
+-- ============================================================
+-- INTRO ANIMATION (NEW) - Purple gradient, soul image, "AIS DUELS" text
+-- ============================================================
+local function playIntroAnimation()
+    local localPlayer = game.Players.LocalPlayer
+    local playerGui = localPlayer:FindFirstChild('PlayerGui')
+    if not playerGui then return end
+    
+    -- First Soul Animation Screen
+    local screenGui = Instance.new('ScreenGui')
+    screenGui.IgnoreGuiInset = true
+    screenGui.Parent = playerGui
+    
+    local imageLabel = Instance.new('ImageLabel')
+    imageLabel.Parent = screenGui
+    imageLabel.Size = UDim2.new(0, 0, 0, 0)
+    imageLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+    imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    imageLabel.BackgroundTransparency = 1
+    imageLabel.Image = 'rbxassetid://13879097036'
+    imageLabel.ScaleType = Enum.ScaleType.Fit
+    imageLabel.BorderSizePixel = 0
+    imageLabel.ImageTransparency = 0
+    
+    -- Rotation and size animation variables
+    local u1 = 1          -- Rotation duration
+    local u2 = 10         -- Rotation speed
+    local u3 = 0.7        -- Size grow duration
+    local u4 = 0.5        -- Transparency start
+    
+    -- Rotation animation
+    task.spawn(function()
+        local v5 = tick()
+        while tick() - v5 < u1 do
+            imageLabel.Rotation = imageLabel.Rotation + u2
+            task.wait(0.01)
+        end
+    end)
+    
+    -- Size and transparency animation
+    task.spawn(function()
+        local v6 = tick()
+        while tick() - v6 < u3 do
+            local v7 = (tick() - v6) / u3 * 1.2
+            imageLabel.Size = UDim2.new(v7, 0, v7, 0)
+            if u4 <= v7 then
+                local v8 = (v7 - u4) / (1.2 - u4)
+                imageLabel.ImageTransparency = math.clamp(v8, 0, 1)
+            end
+            task.wait(0.01)
+        end
+        imageLabel.Size = UDim2.new(1.2, 0, 1.2, 0)
+        imageLabel.ImageTransparency = 1
+    end)
+    
+    -- Destroy first screen
+    task.delay(u1, function()
+        screenGui:Destroy()
+    end)
+    
+    -- Second Screen with purple gradient and logo
+    local screenGui2 = Instance.new('ScreenGui')
+    screenGui2.IgnoreGuiInset = true
+    screenGui2.ResetOnSpawn = false
+    screenGui2.Parent = playerGui
+    
+    -- Purple gradient background
+    local frame = Instance.new('Frame')
+    frame.Parent = screenGui2
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(120, 0, 255)
+    frame.BackgroundTransparency = 0.4
+    frame.ZIndex = 0
+    
+    local uIGradient = Instance.new('UIGradient')
+    uIGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 50, 255)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(80, 0, 180)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 50, 255))
+    })
+    uIGradient.Rotation = 0
+    uIGradient.Parent = frame
+    
+    -- Rotating gradient
+    task.spawn(function()
+        while frame.Parent do
+            uIGradient.Rotation = (uIGradient.Rotation + 1) % 360
+            task.wait(0.02)
+        end
+    end)
+    
+    -- Second soul image
+    local imageLabel2 = Instance.new('ImageLabel')
+    imageLabel2.Parent = screenGui2
+    imageLabel2.Size = UDim2.new(0, 0, 0, 0)
+    imageLabel2.Position = UDim2.new(0.5, 0, 0.5, 0)
+    imageLabel2.AnchorPoint = Vector2.new(0.5, 0.5)
+    imageLabel2.BackgroundTransparency = 1
+    imageLabel2.Image = 'rbxassetid://13879097036'
+    imageLabel2.ScaleType = Enum.ScaleType.Fit
+    imageLabel2.BorderSizePixel = 0
+    imageLabel2.ImageTransparency = 0
+    
+    -- Background music
+    local sound2 = Instance.new('Sound')
+    sound2.SoundId = 'rbxassetid://76650356472656'
+    sound2.Volume = 2
+    sound2.TimePosition = 3
+    sound2.Parent = playerGui
+    sound2:Play()
+    
+    -- Fade out music after 8 seconds
+    task.delay(8, function()
+        local tweenService = game:GetService("TweenService")
+        tweenService:Create(sound2, TweenInfo.new(1), {Volume = 0}):Play()
+        task.wait(1)
+        sound2:Stop()
+    end)
+    
+    -- Second screen animation variables
+    local u9 = 4          -- Total duration
+    local u10 = 2         -- Image grow duration
+    local u11 = 0         -- Rotation speed
+    local u12 = 12        -- Max rotation speed
+    local u13 = 0.2       -- Rotation change rate
+    local u14 = 1.5       -- Fade out duration
+    
+    -- Accelerating rotation
+    task.spawn(function()
+        local v15 = tick()
+        while imageLabel2.Parent do
+            if tick() - v15 >= u9 - u14 then
+                u11 = math.max(u11 - u13, 0)
+            else
+                u11 = math.min(u11 + u13, u12)
+            end
+            imageLabel2.Rotation = imageLabel2.Rotation + u11
+            task.wait(0.01)
+        end
+    end)
+    
+    -- Image size grow
+    task.spawn(function()
+        local v16 = tick()
+        while tick() - v16 < u10 do
+            local v17 = (tick() - v16) / u10
+            imageLabel2.Size = UDim2.new(v17, 0, v17, 0)
+            task.wait(0.01)
+        end
+        imageLabel2.Size = UDim2.new(1, 0, 1, 0)
+    end)
+    
+    -- Fade out animation
+    task.spawn(function()
+        task.wait(u9 - u14)
+        local u142 = u14
+        local v18 = tick()
+        while tick() - v18 < u142 do
+            local v19 = (tick() - v18) / u142
+            imageLabel2.ImageTransparency = v19
+            frame.BackgroundTransparency = 0.4 + v19 * 0.6
+            uIGradient.Transparency = NumberSequence.new(v19)
+            task.wait(0.01)
+        end
+    end)
+    
+    -- Text animation after soul fades
+    task.delay(u9, function()
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Parent = screenGui2
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = "TARGET DUELS"
+        textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)  -- PUTI NA
+        textLabel.Font = Enum.Font.GothamBlack
+        textLabel.TextSize = 1
+        textLabel.TextTransparency = 1
+        
+        -- Black stroke border
+        local uiStroke = Instance.new("UIStroke")
+        uiStroke.Parent = textLabel
+        uiStroke.Color = Color3.fromRGB(0, 0, 0)
+        uiStroke.Thickness = 3
+        uiStroke.Transparency = 1
+        
+        -- Remove previous image
+        imageLabel2:Destroy()
+        
+        -- Text fade in animation
+        local tweenService = game:GetService("TweenService")
+        tweenService:Create(textLabel, TweenInfo.new(1.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            TextSize = 80,
+            TextTransparency = 0
+        }):Play()
+        tweenService:Create(uiStroke, TweenInfo.new(1.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Transparency = 0
+        }):Play()
+        
+        task.wait(2.5)
+        
+        -- Text fade out animation
+        tweenService:Create(textLabel, TweenInfo.new(1, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            TextTransparency = 1,
+            TextSize = 120
+        }):Play()
+        tweenService:Create(uiStroke, TweenInfo.new(1, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Transparency = 1
+        }):Play()
+        
+        task.wait(1)
+        screenGui2:Destroy()
+    end)
+end
+
+-- Play intro immediately on script execution
+task.spawn(function()
+    playIntroAnimation()
+end)
+
+-- ============================================================
+-- DROP TYPES (Stand = Brainrot fling, Jump = ascend)
+-- ============================================================
+local DROP_TYPES = {
+    STAND = "Stand Drop",
+    JUMP = "Jump Drop"
+}
+local currentDropType = DROP_TYPES.JUMP  -- default to Jump Drop (safer)
+
+-- ============================================================
+-- CONFIG VERSION & EARLY LOAD
+-- ============================================================
+local CONFIG_VERSION = 2
+local CONFIG_FILE = "TargetDuelsConfig.json"
+local CONFIG_BACKUP = "TargetDuelsConfig.bak"
+
+local earlyConfig = nil
+local function loadEarlyConfig()
+    if not _isfile(CONFIG_FILE) then return nil end
+    local raw = _readfile(CONFIG_FILE)
+    if not raw then return nil end
+    local ok, cfg = pcall(function() return HttpService:JSONDecode(raw) end)
+    if ok and cfg and cfg.version == CONFIG_VERSION then return cfg end
+    return nil
+end
+earlyConfig = loadEarlyConfig()
+
+-- ============================================================
+-- INFINITE JUMP (platform-based version)
+-- ============================================================
+local InfJumpPlatform = nil
+
+local function CreateIJP()
+    if InfJumpPlatform then return end
+    InfJumpPlatform = Instance.new("Part")
+    InfJumpPlatform.Name = "InfJumpPlatform"
+    InfJumpPlatform.Size = Vector3.new(8, 0.5, 8)
+    InfJumpPlatform.Anchored = true
+    InfJumpPlatform.CanCollide = true
+    InfJumpPlatform.Transparency = 1
+    InfJumpPlatform.Material = Enum.Material.ForceField
+    InfJumpPlatform.Parent = workspace
+end
+
+CreateIJP()
+
+-- ============================================================
+-- STATE
+-- ============================================================
+local State = {
+    normalSpeed=62, carrySpeed=32, laggerSpeed=9, laggerCarrySpeed=17,
+    speedToggled=false,
+    laggerMode=0,
+    infJumpEnabled=true, 
+    guiVisible=true, uiLocked=false,
+    isStealing=false, stealStartTime=nil, lastStealTick=0,
+    autoLeftEnabled=false, autoRightEnabled=false,
+    autoLeftPhase=1, autoRightPhase=1,
+    medusaLastUsed=0, medusaDebounce=false, medusaCounterEnabled=false,
+    batAimbotToggled=false, autoSwingEnabled=false,
+    hittingCooldown=false,
+    batCounterEnabled=false, batCounterDebounce=false,
+    dropEnabled=false, _tpInProgress=false,
+    lastMoveDir=Vector3.new(0,0,0),
+    _prevCarry=30, _prevSpeed=false,
+    stackButtonsHidden=false,
+    countdownActive=false,
+    stackButtonsLocked=false,
+    nukeOpt=false,
+    removeAcc=false,
+    antiLagEnabled=false,
+    stretchedResEnabled=false,
+    stretchFOV=120,
+    activeSky=nil,
+    tryardAnimEnabled=false,
+    introEnabled=true,
+    autoTPEnabled=false,
+    autoTPHeight=20,
+    autoTPConn=nil,
+    tpBatEnabled=false,     -- TP BAT
+    antiRagdollEnabled=false, -- ANTI-RAGDOLL (advanced)
+    -- NEW VISUAL FEATURES FROM AIS HUB
+    vizFpsBoosterEnabled=false,
+    purpleSkyEnabled=false,
+}
+
+if earlyConfig and earlyConfig.introEnabled ~= nil then
+    State.introEnabled = earlyConfig.introEnabled
+end
+
+local Keys = {
+    speed=Enum.KeyCode.Q, guiHide=Enum.KeyCode.LeftControl,
+    autoLeft=Enum.KeyCode.L, autoRight=Enum.KeyCode.R,
+    lagger=Enum.KeyCode.Unknown,
+    tpDown=Enum.KeyCode.Unknown,
+    drop=Enum.KeyCode.H, aimbot=Enum.KeyCode.Unknown,
+    tpBat=Enum.KeyCode.Unknown,   -- TP BAT keybind
+}
+
+-- ============================================================
+-- INSTANT RESET (added)
+-- ============================================================
+local GUID = "f888ee6e-c86d-46e1-93d7-0639d6635d42"
+local resetRemote = nil
+local resetStates = {
+    BALLOON = false,
+    JAIL = false,
+    TINY = false,
+    RAGDOLL = false,
+    ROCKET = false
+}
+
+-- Hook to detect the reset RemoteEvent
+local oldFire = nil
+oldFire = hookfunction(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+    if not resetRemote and self.Name:sub(1, 3) == "RE/" then
+        resetRemote = self
+    end
+    return oldFire(self, ...)
+end))
+
+local function instareset(resetType)
+    if not resetRemote then return end
+    local oldChar = LP.Character
+    task.spawn(function()
+        while LP.Character == oldChar do
+            pcall(function()
+                resetRemote:FireServer(GUID, LP, resetType or "balloon")
+            end)
+            task.wait()
+        end
+    end)
+end
+
+-- Auto reset detection
+for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+    if obj:IsA("RemoteEvent") then
+        obj.OnClientEvent:Connect(function(...)
+            for _, arg in ipairs({...}) do
+                if type(arg) == "string" then
+                    local msg = arg:lower()
+                    if msg:find("jump higher") and resetStates.BALLOON then
+                        instareset("balloon")
+                    elseif msg:find("jail") and resetStates.JAIL then
+                        instareset("jail")
+                    elseif msg:find("tiny") and resetStates.TINY then
+                        instareset("tiny")
+                    elseif msg:find("ragdoll") and resetStates.RAGDOLL then
+                        instareset("ragdoll")
+                    elseif msg:find("rocket") and resetStates.ROCKET then
+                        instareset("rocket")
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- ============================================================
+-- INFINITE JUMP PLATFORM LOGIC
+-- ============================================================
+RunService.Heartbeat:Connect(function()
+    if not State.infJumpEnabled then 
+        if InfJumpPlatform then
+            InfJumpPlatform.Position = Vector3.new(0, -1000, 0)
+        end
+        return 
+    end
+    
+    local char = LP.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not (char and root and hum) then 
+        if InfJumpPlatform then
+            InfJumpPlatform.Position = Vector3.new(0, -1000, 0)
+        end
+        return 
+    end
+
+    local isJumping = UIS:IsKeyDown(Enum.KeyCode.Space)
+        or hum:GetState() == Enum.HumanoidStateType.Jumping
+        or hum.Jump
+
+    if isJumping then
+        if not InfJumpPlatform then CreateIJP() end
+        InfJumpPlatform.Position = root.Position - Vector3.new(0, 3.5, 0)
+        if root.Velocity.Y < 50 then
+            root.Velocity = Vector3.new(root.Velocity.X, 50, root.Velocity.Z)
+        end
+    else
+        if InfJumpPlatform then
+            InfJumpPlatform.Position = Vector3.new(0, -1000, 0)
+        end
+    end
+end)
+
+-- ============================================================
+-- TRYARD ANIMATION PACK
+-- ============================================================
+local TryardAnims = {
+    idle1 = "rbxassetid://133806214992291",
+    idle2 = "rbxassetid://94970088341563",
+    walk  = "rbxassetid://707897309",
+    run   = "rbxassetid://707861613",
+    jump  = "rbxassetid://116936326516985",
+    fall  = "rbxassetid://116936326516985",
+    climb = "rbxassetid://116936326516985",
+    swim  = "rbxassetid://116936326516985",
+    swimidle = "rbxassetid://116936326516985",
+}
+task.spawn(function()
+    pcall(function() ContentProvider:PreloadAsync({
+        TryardAnims.idle1, TryardAnims.idle2, TryardAnims.walk, TryardAnims.run,
+        TryardAnims.jump, TryardAnims.fall, TryardAnims.climb, TryardAnims.swim, TryardAnims.swimidle,
+    }) end)
+end)
+local tryardHeartbeatConn = nil
+local originalTryardAnims = nil
+local function isTryardPackAnim(id) for _,v in pairs(TryardAnims) do if v==id then return true end end return false end
+local function saveOriginalTryardAnims(char)
+    local animate = char:FindFirstChild("Animate")
+    if not animate then return end
+    local function g(obj) return obj and obj.AnimationId or nil end
+    local ids = {
+        idle1 = g(animate.idle and animate.idle.Animation1),
+        idle2 = g(animate.idle and animate.idle.Animation2),
+        walk  = g(animate.walk and animate.walk.WalkAnim),
+        run   = g(animate.run  and animate.run.RunAnim),
+        jump  = g(animate.jump and animate.jump.JumpAnim),
+        fall  = g(animate.fall and animate.fall.FallAnim),
+        climb = g(animate.climb and animate.climb.ClimbAnim),
+        swim  = g(animate.swim and animate.swim.Swim),
+        swimidle = g(animate.swimidle and animate.swimidle.SwimIdle),
+    }
+    if not isTryardPackAnim(ids.walk) then originalTryardAnims = ids end
+end
+local function applyTryardAnimPack(char)
+    local animate = char:FindFirstChild("Animate")
+    if not animate then return end
+    local function s(obj,id) if obj then obj.AnimationId=id end end
+    s(animate.idle and animate.idle.Animation1, TryardAnims.idle1)
+    s(animate.idle and animate.idle.Animation2, TryardAnims.idle2)
+    s(animate.walk and animate.walk.WalkAnim, TryardAnims.walk)
+    s(animate.run  and animate.ru
